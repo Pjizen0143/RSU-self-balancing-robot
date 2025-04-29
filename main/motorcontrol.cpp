@@ -95,3 +95,14 @@ void motorcontrol::turnRight(int speed, bool kick)
     analogWrite(_ena, speed * _motorAConst);
     analogWrite(_enb, speed * _motorBConst);
 }
+
+
+void motorcontrol::stop() {
+    digitalWrite(_in1, HIGH);
+    digitalWrite(_in2, HIGH);
+    digitalWrite(_in3, HIGH);
+    digitalWrite(_in4, HIGH);
+    analogWrite(_ena, 0);
+    analogWrite(_enb, 0);
+    _currentSpeed = 0;
+}
