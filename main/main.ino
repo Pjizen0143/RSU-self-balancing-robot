@@ -3,47 +3,47 @@
 #include <PID_v1.h>
 #include "motorcontrol.h"
 #include "IRController.h"
-//#include "display.h"
 
-#define MIN_ABS_SPEED 30
+#define MIN_ABS_SPEED 80
 
-double deadzone = 0.2;
-bool isFarFromSetpoint = false;
+double deadzone = 0;
 
 MPU6050 mpu6050(Wire);
 IRController ir(4); // IR Receiver ที่ขา D4
 
 // PID Variables
-double originalSetpoint = 0.42;
+double originalSetpoint = 0.8;
 double setpoint = originalSetpoint;
+double targetSetpoint = originalSetpoint;
+
 double input, output;
-double Kp = 18;//45
-double Ki = 75; //120
-double Kd = 0.68;// 1
+double Kp = 20;
+double Ki = 160;
+double Kd = 1;
 
 PID pid(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
 
 // Motor controller setup
-
-double motorSpeedFactorA = 1.22; //1
-double motorSpeedFactorB = 2; //2
-int ENA = 10;
-int IN1 = 8;
-int IN2 = 9;
-int ENB = 7;
-int IN3 = 12;
-int IN4 = 13;
+double motorSpeedFactorA = 0.9;
+double motorSpeedFactorB = 0.9;
+int ENA = 5;
+int IN1 = 13;
+int IN2 = 12;
+int ENB = 6;
+int IN3 = 9;
+int IN4 = 8;
 motorcontrol my_motor(ENA, IN1, IN2, ENB, IN3, IN4, motorSpeedFactorA, motorSpeedFactorB);
 
-// เก็บเวลาล่าสุดที่ปุ่มถูกกด
+// เวลา
 unsigned long lastCommandTime = 0;
-unsigned long commandTimeout = 200; // 200ms ถือว่าไม่ได้กดแล้ว
+unsigned long commandTimeout = 200;
 
 void setup() {
   Serial.begin(115200);
   Wire.begin();
   mpu6050.begin();
-  mpu6050.setGyroOffsets(-1.14, 1.02, -1.58); // จับ offset อัตโนมัติ
+//  mpu6050.setGyroOffsets(-1.36, 1.01, -1.13);
+  mpu6050.setGyroOffsets(0.00, 1.34, 0.00);
 
   my_motor.begin();
 
@@ -51,56 +51,49 @@ void setup() {
   pid.SetSampleTime(10);
   pid.SetOutputLimits(-255, 255);
 
-  ir.begin(); // เริ่มต้น IR Receiver
+  ir.begin();
   Serial.println("Ready!");
 }
 
 void loop() {
-  // อัปเดต MPU6050 และ PID
+  // อ่านเซนเซอร์
   mpu6050.update();
   input = mpu6050.getAngleX();
+
+  // PID คำนวณจาก setpoint
   pid.Compute();
 
-   if (!isFarFromSetpoint && abs(input - setpoint) > 20) {
-    pid.SetTunings(Kp, 0, Kd);
-    isFarFromSetpoint = true;
-  }
-
-  // คืนค่า Ki เมื่อกลับมาใกล้
-  if (isFarFromSetpoint && abs(input - setpoint) <= 5) {
-    pid.SetTunings(Kp, Ki, Kd);
-    isFarFromSetpoint = false;
-  }
-  
-  // Deadzone threshold (องศา)
+  // มอเตอร์ทำงาน
   if (abs(input - setpoint) < deadzone) {
-  my_motor.stop();  // หยุดมอเตอร์จริง
+    my_motor.stop();
   } else {
-  my_motor.move(-output, MIN_ABS_SPEED);  // ขยับตามปกติ
-  } 
+    my_motor.move(output, MIN_ABS_SPEED);
+  }
 
-  // อ่านค่าจาก IR
+  // อ่าน IR
   unsigned long code = 0;
   if (ir.available(code)) {
     if (ir.forward(code)) {
-      if (setpoint < originalSetpoint+5)
-            setpoint += 0.2;
-    } else if (ir.backward(code)) {;
-        if (setpoint > originalSetpoint-5)
-            setpoint -= 0.2;
-    } else if (ir.turnLeft(code)){
+      if (targetSetpoint < originalSetpoint + 5)
+        targetSetpoint += 0.2;
+    } else if (ir.backward(code)) {
+      if (targetSetpoint > originalSetpoint - 5)
+        targetSetpoint -= 0.2;
+    } else if (ir.turnLeft(code)) {
       my_motor.turnLeft(MIN_ABS_SPEED, false);
-    } else if (ir.turnRight(code)){
+    } else if (ir.turnRight(code)) {
       my_motor.turnRight(MIN_ABS_SPEED, false);
     }
     lastCommandTime = millis();
   }
 
-  // ถ้าไม่มีคำสั่งนานเกิน timeout → reset
+  // ถ้าไม่มีคำสั่งนาน → กลับไป originalSetpoint
   if (millis() - lastCommandTime > commandTimeout) {
-    setpoint = originalSetpoint;
+    targetSetpoint = originalSetpoint;
   }
 
+  // Soft transition: ปรับ setpoint ทีละน้อย
+  setpoint = 0.9 * setpoint + 0.1 * targetSetpoint;
 
   // Debug
   Serial.print(" | Angle: ");
@@ -110,7 +103,5 @@ void loop() {
   Serial.print(" | Setpoint: ");
   Serial.println(setpoint);
 
-  delay(10); // PID sample time
-
- 
+  delay(10);
 }
