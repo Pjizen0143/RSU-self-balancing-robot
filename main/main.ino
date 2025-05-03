@@ -16,7 +16,8 @@
 MPU6050 mpu6050(Wire);
 IRController ir(4);
 
-double input, output, setpoint = 0;
+double originalSetpoint = 1;
+double input, output, setpoint = originalSetpoint;
 double Kp = 30, Ki = 80, Kd = 0.05;
 double speedOffset = 0, trunOffset = 0, realOutput;
 
@@ -49,7 +50,6 @@ void loop() {
 
   // คำนวณค่า PID
   pid.Compute();
-  realOutput = output;
   
   unsigned long now = millis();
   
@@ -61,27 +61,23 @@ void loop() {
       switch (cmd) {
           case IRCommand::Forward:
               // เดินหน้า
-              if (speedOffset < 50)
-                speedOffset += 1;
+              if (setpoint < originalSetpoint + 3)
+                setpoint += 0.5;
               break;
 
           case IRCommand::Backward:
-               if (speedOffset > -50)
-                speedOffset -= 1;
+               if (setpoint > originalSetpoint - 3)
+                setpoint -= 0.5;
               break;
 
           case IRCommand::Left:
               // เลี้ยวซ้าย
-              if (speedOffset < 50)
-                speedOffset += 1;
-              trunOffset = 50;
+              my_motor.turnLeft(255);
               break;
 
           case IRCommand::Right:
               // เลี้ยวขวา
-              if (speedOffset < 50)
-                speedOffset += 1;
-              trunOffset = -50;
+              my_motor.turnRight(255);
               break;
 
           default:
@@ -91,8 +87,7 @@ void loop() {
 
   // กลับสู่สภาวะ Default ถ้าไม่มีคำสั่ง IR มานานเกินไป
   if (now - ir.getLastCommandTime() > commandTimeout) {
-     speedOffset = 0;
-     trunOffset = 0;
+     setpoint = originalSetpoint;
   }
   my_motor.move(output, speedOffset, trunOffset, MIN_ABS_SPEED);
 
@@ -101,11 +96,7 @@ void loop() {
   Serial.print(input);
   Serial.print(" | Output: ");
   Serial.print(output);
-  Serial.print(" | speedOffset: ");
-  Serial.print(speedOffset);
-  Serial.print(" | trunOffset: ");
-  Serial.print(trunOffset);
-
-
+  Serial.print(" | Setpoint: ");
+  Serial.print(setpoint);
   delay(10);
 }
