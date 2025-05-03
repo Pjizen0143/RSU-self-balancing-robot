@@ -3,8 +3,8 @@
 
 
 motorcontrol::motorcontrol(int ena, int in1, int in2, int enb, int in3, int in4, double motorAConst, double motorBConst){
-    _motorAConst = motorAConst;
-    _motorBConst = motorBConst;
+    _motorAConst = motorAConst; // ตัวคูณความเร็วของมอเตอร์ A
+    _motorBConst = motorBConst; 
     
   _ena = ena;
   _in1 = in1;
@@ -24,16 +24,14 @@ void motorcontrol::begin(){
   pinMode(_in4, OUTPUT);
 }
 
-
-void motorcontrol::move(int speed, int minAbsSpeed)
+void motorcontrol::_move(int speed, int minAbsSpeed, int bias)
 {
-    int direction = 1;
+    int direction = 1; // ตัวคูณถ้าไปหน้าเป็น + ถอยหลังเป็น -
     
     if (speed < 0)
     {
         direction = -1;
-        
-        speed = min(speed, -1*minAbsSpeed);
+        speed = min(speed, -minAbsSpeed);
         speed = max(speed, -255);
     }
     else
@@ -41,59 +39,58 @@ void motorcontrol::move(int speed, int minAbsSpeed)
         speed = max(speed, minAbsSpeed);
         speed = min(speed, 255);
     }
-    
-    if (abs(speed - _currentSpeed) < 3) return;
-    
-    int realSpeed = max(minAbsSpeed, abs(speed));
-    
+
+    // ถ้าความเร็วเปลี่ยนไม่เยอะกับไม่มีการเลี้ยว ไม่ต้องสั่งมอเตอร์
+    if (abs(speed - _currentSpeed) < 3 && bias == 0) return;
+
+    int baseSpeed = abs(speed);
+    int leftSpeed = baseSpeed + bias;
+    int rightSpeed = baseSpeed - bias;
+
+    leftSpeed = constrain(leftSpeed, 0, 255);
+    rightSpeed = constrain(rightSpeed, 0, 255);
+
     digitalWrite(_in1, speed > 0 ? HIGH : LOW);
     digitalWrite(_in2, speed > 0 ? LOW : HIGH);
     digitalWrite(_in3, speed > 0 ? HIGH : LOW);
     digitalWrite(_in4, speed > 0 ? LOW : HIGH);
-    analogWrite(_ena, constrain(realSpeed * _motorAConst, 0, 255));
-    analogWrite(_enb, constrain(realSpeed * _motorBConst, 0, 255));
-    
-    _currentSpeed = direction * realSpeed;
+
+    analogWrite(_ena, leftSpeed * _motorAConst);
+    analogWrite(_enb, rightSpeed * _motorBConst);
+
+    _currentSpeed = direction * baseSpeed;
 }
 
 
-void motorcontrol::turnLeft(int speed, bool kick)
+
+void motorcontrol::turnLeft(int speed)
 {
     digitalWrite(_in1, HIGH);
     digitalWrite(_in2, LOW);
     digitalWrite(_in3, LOW);
     digitalWrite(_in4, HIGH);
     
-    if (kick)
-    {
-        analogWrite(_ena, 255);
-        analogWrite(_enb, 255);
-    
-        delay(100);
-    }
+    analogWrite(_ena, speed * _motorAConst);
+    analogWrite(_enb, speed * _motorBConst);
+}
+
+
+void motorcontrol::turnRight(int speed)
+{
+    digitalWrite(_in1, LOW);
+    digitalWrite(_in2, HIGH);
+    digitalWrite(_in3, HIGH);
+    digitalWrite(_in4, LOW);
     
     analogWrite(_ena, speed * _motorAConst);
     analogWrite(_enb, speed * _motorBConst);
 }
 
 
-void motorcontrol::turnRight(int speed, bool kick)
+void motorcontrol::move(int speed, int speedoffset, int turnOffset, int minAbsSpeed)
 {
-    digitalWrite(_in1, LOW);
-    digitalWrite(_in2, HIGH);
-    digitalWrite(_in3, HIGH);
-    digitalWrite(_in4, LOW);
- 
-    if (kick)
-    {
-        analogWrite(_ena, 255);
-        analogWrite(_enb, 255);
-    
-        delay(100);
-    }
-    
-    analogWrite(_ena, speed * _motorAConst);
-    analogWrite(_enb, speed * _motorBConst);
+    int controlSpeed = speed + speedoffset;
+    _move(controlSpeed, minAbsSpeed, turnOffset);
 }
 
 

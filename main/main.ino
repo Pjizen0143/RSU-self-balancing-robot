@@ -4,46 +4,33 @@
 #include "motorcontrol.h"
 #include "IRController.h"
 
-#define MIN_ABS_SPEED 80
+#define MIN_ABS_SPEED 0
 
-double deadzone = 0;
+#define IN1 8
+#define IN2 9
+#define ENA 6
+#define ENB 5
+#define IN3 13
+#define IN4 12
 
 MPU6050 mpu6050(Wire);
-IRController ir(4); // IR Receiver ที่ขา D4
+IRController ir(4);
 
-// PID Variables
-double originalSetpoint = 0.8;
-double setpoint = originalSetpoint;
-double targetSetpoint = originalSetpoint;
-
-double input, output;
-double Kp = 20;
-double Ki = 160;
-double Kd = 1;
+double input, output, setpoint = 0;
+double Kp = 30, Ki = 80, Kd = 0.05;
+double speedOffset = 0, trunOffset = 0, realOutput;
 
 PID pid(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
 
-// Motor controller setup
-double motorSpeedFactorA = 0.9;
-double motorSpeedFactorB = 0.9;
-int ENA = 5;
-int IN1 = 13;
-int IN2 = 12;
-int ENB = 6;
-int IN3 = 9;
-int IN4 = 8;
-motorcontrol my_motor(ENA, IN1, IN2, ENB, IN3, IN4, motorSpeedFactorA, motorSpeedFactorB);
+motorcontrol my_motor(ENA, IN1, IN2, ENB, IN3, IN4, 1.0, 1.0);  // SpeedFactorA, SpeedFactorB
 
-// เวลา
-unsigned long lastCommandTime = 0;
-unsigned long commandTimeout = 200;
+unsigned long commandTimeout = 200;  // สำหรับเข็คว่ามี IRcommand ไหมใน 0.2 วิ
 
 void setup() {
   Serial.begin(115200);
   Wire.begin();
   mpu6050.begin();
-//  mpu6050.setGyroOffsets(-1.36, 1.01, -1.13);
-  mpu6050.setGyroOffsets(0.00, 1.34, 0.00);
+  mpu6050.setGyroOffsets(-1.99, 0.00, 0.00);
 
   my_motor.begin();
 
@@ -56,52 +43,69 @@ void setup() {
 }
 
 void loop() {
-  // อ่านเซนเซอร์
+  // อ่านข้อมูลจากเซนเซอร์
   mpu6050.update();
   input = mpu6050.getAngleX();
 
-  // PID คำนวณจาก setpoint
+  // คำนวณค่า PID
   pid.Compute();
+  realOutput = output;
+  
+  unsigned long now = millis();
+  
+  if (ir.available()) {
+      IRCommand cmd = ir.getCommand();
+      ir.resume();
+      ir.updateLastCommandTime();
 
-  // มอเตอร์ทำงาน
-  if (abs(input - setpoint) < deadzone) {
-    my_motor.stop();
-  } else {
-    my_motor.move(output, MIN_ABS_SPEED);
+      switch (cmd) {
+          case IRCommand::Forward:
+              // เดินหน้า
+              if (speedOffset < 50)
+                speedOffset += 1;
+              break;
+
+          case IRCommand::Backward:
+               if (speedOffset > -50)
+                speedOffset -= 1;
+              break;
+
+          case IRCommand::Left:
+              // เลี้ยวซ้าย
+              if (speedOffset < 50)
+                speedOffset += 1;
+              trunOffset = 50;
+              break;
+
+          case IRCommand::Right:
+              // เลี้ยวขวา
+              if (speedOffset < 50)
+                speedOffset += 1;
+              trunOffset = -50;
+              break;
+
+          default:
+              break;
+      }
   }
 
-  // อ่าน IR
-  unsigned long code = 0;
-  if (ir.available(code)) {
-    if (ir.forward(code)) {
-      if (targetSetpoint < originalSetpoint + 5)
-        targetSetpoint += 0.2;
-    } else if (ir.backward(code)) {
-      if (targetSetpoint > originalSetpoint - 5)
-        targetSetpoint -= 0.2;
-    } else if (ir.turnLeft(code)) {
-      my_motor.turnLeft(MIN_ABS_SPEED, false);
-    } else if (ir.turnRight(code)) {
-      my_motor.turnRight(MIN_ABS_SPEED, false);
-    }
-    lastCommandTime = millis();
+  // กลับสู่สภาวะ Default ถ้าไม่มีคำสั่ง IR มานานเกินไป
+  if (now - ir.getLastCommandTime() > commandTimeout) {
+     speedOffset = 0;
+     trunOffset = 0;
   }
+  my_motor.move(output, speedOffset, trunOffset, MIN_ABS_SPEED);
 
-  // ถ้าไม่มีคำสั่งนาน → กลับไป originalSetpoint
-  if (millis() - lastCommandTime > commandTimeout) {
-    targetSetpoint = originalSetpoint;
-  }
-
-  // Soft transition: ปรับ setpoint ทีละน้อย
-  setpoint = 0.9 * setpoint + 0.1 * targetSetpoint;
-
-  // Debug
+  // แสดงข้อมูลใน Serial Monitor
   Serial.print(" | Angle: ");
   Serial.print(input);
   Serial.print(" | Output: ");
   Serial.print(output);
-  Serial.print(" | Setpoint: ");
-  Serial.println(setpoint);
+  Serial.print(" | speedOffset: ");
+  Serial.print(speedOffset);
+  Serial.print(" | trunOffset: ");
+  Serial.print(trunOffset);
+
 
   delay(10);
 }

@@ -1,48 +1,42 @@
 #include "IRController.h"
 
-IRController::IRController(int recvPin) : irrecv(recvPin) {
-    lastCode = 0;
-    lastIRTime = 0;
-}
+IRController::IRController(int recvPin) : irrecv(recvPin), lastCode(0), lastCommandTime(0) {}
 
 void IRController::begin() {
     irrecv.enableIRIn();
 }
 
-bool IRController::available(unsigned long &codeOut) {
-    if (irrecv.decode(&results)) {
-        lastIRTime = millis();
+bool IRController::available() {
+    return irrecv.decode(&results);
+}
 
-        if (results.value == 0xFFFFFFFF) {
-            codeOut = lastCode;
-        } else {
-            lastCode = results.value;
-            codeOut = results.value;
-        }
+IRCommand IRController::getCommand() {
+    unsigned long code;
 
-        irrecv.resume();
-        return true;
+    if (results.value == 0xFFFFFFFF) {
+        code = lastCode;
+    } else {
+        code = results.value;
+        lastCode = code;
     }
 
-    if (millis() - lastIRTime > 200) {
-        codeOut = 0;
+    switch (code) {
+        case 0xFF18E7: return IRCommand::Forward;
+        case 0xFF4AB5: return IRCommand::Backward;
+        case 0xFF10EF: return IRCommand::Left;
+        case 0xFF5AA5: return IRCommand::Right;
+        default:       return IRCommand::None;
     }
-
-    return false;
 }
 
-bool IRController::forward(unsigned long code) {
-    return code == 0xFF18E7;
+void IRController::resume() {
+    irrecv.resume();
 }
 
-bool IRController::backward(unsigned long code) {
-    return code == 0xFF4AB5;
+void IRController::updateLastCommandTime() {
+    lastCommandTime = millis();
 }
 
-bool IRController::turnLeft(unsigned long code) {
-    return code == 0xFF10EF;
-}
-
-bool IRController::turnRight(unsigned long code) {
-    return code == 0xFF5AA5;
+unsigned long IRController::getLastCommandTime(){
+    return lastCommandTime;
 }

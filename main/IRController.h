@@ -1,24 +1,33 @@
-#ifndef IRCONTROLLER_H
-#define IRCONTROLLER_H
+#ifndef IRController_h
+#define IRController_h
 
-#include <IRremote.h>
+#include <IRremote.h>  // library สำหรับ IR
+
+enum class IRCommand {
+    None,
+    Forward,
+    Backward,
+    Left,
+    Right
+};
 
 class IRController {
 public:
     IRController(int recvPin);
     void begin();
-    bool available(unsigned long &codeOut);
 
-    bool forward(unsigned long code);
-    bool backward(unsigned long code);
-    bool turnLeft(unsigned long code);
-    bool turnRight(unsigned long code);
+    bool available();                          // ตรวจว่ามีสัญญาณเข้ามาไหม
+    IRCommand getCommand();                    // แปลงรหัสเป็นคำสั่ง
+    void resume();                             // Resume IR receiver
+    void updateLastCommandTime();              // อัปเดตเวลาคำสั่งล่าสุด
+    unsigned long getLastCommandTime();        // ดึงเวลาล่าสุด
 
 private:
-    IRrecv irrecv;
+    IRrecv irrecv; 
     decode_results results;
-    unsigned long lastCode;
-    unsigned long lastIRTime;
+    unsigned long lastCode; 
+    unsigned long lastCommandTime;
 };
+
 
 #endif
