@@ -4,7 +4,8 @@
 #include "motorcontrol.h"
 #include "IRController.h"
 
-#define MIN_ABS_SPEED 0
+#define MIN_ABS_SPEED_A 0
+#define MIN_ABS_SPEED_B 0
 
 #define IN1 8
 #define IN2 9
@@ -41,6 +42,7 @@ void setup() {
 
   ir.begin();
   Serial.println("Ready!");
+  delay(2000);
 }
 
 void loop() {
@@ -66,7 +68,8 @@ void loop() {
               break;
 
           case IRCommand::Backward:
-               if (setpoint > originalSetpoint - 3)
+              // ถอยหลัง 
+              if (setpoint > originalSetpoint - 3)
                 setpoint -= 0.5;
               break;
 
@@ -89,7 +92,7 @@ void loop() {
   if (now - ir.getLastCommandTime() > commandTimeout) {
      setpoint = originalSetpoint;
   }
-  my_motor.move(output, speedOffset, trunOffset, MIN_ABS_SPEED);
+  my_motor.move(output, speedOffset, trunOffset, MIN_ABS_SPEED_A, MIN_ABS_SPEED_B);
 
   // แสดงข้อมูลใน Serial Monitor
   Serial.print(" | Angle: ");
