@@ -4,116 +4,152 @@
 #include "motorcontrol.h"
 #include "IRController.h"
 
-#define MIN_ABS_SPEED_A 0
-#define MIN_ABS_SPEED_B 0
 
 #define IN1 8
 #define IN2 9
 #define ENA 6
 #define ENB 5
-#define IN3 13
-#define IN4 12
+#define IN4 11
+#define IN3 10
+
+#define LED 7
+
+int MIN_ABS_SPEED_A = 120;
+int MIN_ABS_SPEED_B = 180;
 
 MPU6050 mpu6050(Wire);
 IRController ir(4);
 
-// PID for balance 
-double angle_input, motor_output, angle_setpoint = 1.0;
-double Kp_bal = 30, Ki_bal = 80, Kd_bal = 0.05;
-PID balancePID(&angle_input, &motor_output, &angle_setpoint, Kp_bal, Ki_bal, Kd_bal, DIRECT);
-
-// PID for velocity
-double velocity_input = 0, velocity_output = 0, velocity_setpoint = 0;
-double Kp_vel = 5.0, Ki_vel = 0.3, Kd_vel = 0.0;
-PID velocityPID(&velocity_input, &velocity_output, &velocity_setpoint, Kp_vel, Ki_vel, Kd_vel, DIRECT);
-
-
-// motor
+double originalSetpoint = 0;
+double input, output, setpoint = originalSetpoint;
+double Kp = 30, Ki = 120, Kd = 0.4;
 double speedOffset = 0, trunOffset = 0;
-motorcontrol my_motor(ENA, IN1, IN2, ENB, IN3, IN4, 1.0, 1.0);  // SpeedFactorA, SpeedFactorB
 
-unsigned long last_time = 0;
-unsigned long commandTimeout = 200;
+double boot = 150;
+double bootLR = 110;
+bool isTurn = false;
+
+PID pid(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
+
+motorcontrol my_motor(ENA, IN1, IN2, ENB, IN3, IN4, 0.95, 1.2);  // SpeedFactorA, SpeedFactorB
+
+unsigned long commandTimeout = 200;  // สำหรับเข็คว่ามี IRcommand ไหมใน 0.2 วิ
 
 void setup() {
   Serial.begin(115200);
   Wire.begin();
   mpu6050.begin();
   mpu6050.setGyroOffsets(-1.99, 0.00, 0.00);
-
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, LOW);
   my_motor.begin();
 
-  balancePID.SetMode(AUTOMATIC);
-  balancePID.SetSampleTime(10);
-  balancePID.SetOutputLimits(-255, 255);
-
-  velocityPID.SetMode(AUTOMATIC);
-  velocityPID.SetSampleTime(10);
-  velocityPID.SetOutputLimits(-10, 10); // ปรับเป้าหมายมุมไม่เกิน ±10 องศา
+  pid.SetMode(AUTOMATIC);
+  pid.SetSampleTime(10);
+  pid.SetOutputLimits(-255, 255);
 
   ir.begin();
   Serial.println("Ready!");
-  delay(2000);
+  digitalWrite(LED, HIGH);
+  delay(800);
+  digitalWrite(LED, LOW);
+  delay(400);
+  digitalWrite(LED, HIGH);
+  delay(200);
+  digitalWrite(LED, LOW);
+  delay(200);
 }
 
 void loop() {
+  // อ่านข้อมูลจากเซนเซอร์
   mpu6050.update();
-  unsigned long now = millis();
-  double gyroX = mpu6050.getGyroX();      // ใช้เป็นตัวแทนความเร็ว
-  double angle = mpu6050.getAngleX();
+  input = mpu6050.getAngleX();
 
-  // --- Velocity PID ---
-  velocity_input = -gyroX;
-  velocityPID.Compute();
-  angle_setpoint = 1.0 + velocity_output;  // 1.0 คือมุมสมดุลปกติ
-
-  // --- Balance PID ---
-  angle_input = angle;
-  balancePID.Compute();
-
-  // --- ตรวจ IR Command ---
-  if (ir.available()) {
-    IRCommand cmd = ir.getCommand();
-    ir.resume();
-    ir.updateLastCommandTime();
-
-    switch (cmd) {
-      case IRCommand::Forward:
-        velocity_setpoint = 20.0;  // เดินหน้า
-        break;
-        
-      case IRCommand::Backward:
-        velocity_setpoint = -20.0; // ถอยหลัง
-        break;
-        
-     case IRCommand::Left:
-        trunOffset = -50; // เลี้ยวซ้าย
-        break;
-        
-      case IRCommand::Right:
-        trunOffset = 50; // เลี้ยวขวา
-        break;
-        
-      default:
-        break;
-    }
-  }
+  // คำนวณค่า PID
+  pid.Compute();
   
+  unsigned long now = millis();
+  
+  if (ir.available()) {
+      IRCommand cmd = ir.getCommand();
+      ir.resume();
+      ir.updateLastCommandTime();
+
+      switch (cmd) {
+          case IRCommand::Forward:
+           
+              if (setpoint < originalSetpoint + 4)
+                setpoint += 1.5;
+              digitalWrite(LED, HIGH);
+              break;
+
+          case IRCommand::Backward:
+              
+              if (setpoint > originalSetpoint - 4)
+                setpoint -= 1.5;
+              digitalWrite(LED, HIGH);
+              break;
+
+          case IRCommand::Left:
+              // เลี้ยวซ้าย
+//              isTurn = true;
+              speedOffset = bootLR;
+              trunOffset = -bootLR;
+              my_motor.turnLeft(255);
+              digitalWrite(LED, HIGH);
+              break;
+
+          case IRCommand::Right:
+              // เลี้ยวขวา
+//              isTurn = true;
+              speedOffset = bootLR;
+              trunOffset = bootLR;
+              digitalWrite(LED, HIGH);
+              break;
+
+          case IRCommand::ForwardBoot:
+              MIN_ABS_SPEED_A = 120;
+              MIN_ABS_SPEED_B = 120;
+              if (setpoint < originalSetpoint + 2)
+                setpoint += 0.5;
+              digitalWrite(LED, HIGH);
+              speedOffset = boot;
+              break;
+
+          case IRCommand::BackwardBoot:
+              MIN_ABS_SPEED_A = 120;
+              MIN_ABS_SPEED_B = 120;
+              if (setpoint > originalSetpoint - 2)
+                setpoint -= 0.5;
+              digitalWrite(LED, HIGH);
+              speedOffset = -boot;
+          default:
+              break;
+      }
+  }
+
   // กลับสู่สภาวะ Default ถ้าไม่มีคำสั่ง IR มานานเกินไป
   if (now - ir.getLastCommandTime() > commandTimeout) {
-    velocity_setpoint = 0;
-    trunOffset = 0;
+     MIN_ABS_SPEED_A = 40;
+     MIN_ABS_SPEED_B = 40;
+     digitalWrite(LED, LOW);
+     trunOffset = 0;
+     speedOffset = 0;
+     isTurn = false;
+     setpoint = originalSetpoint;
   }
 
-  // --- ควบคุมมอเตอร์ ---
-  my_motor.move(motor_output, speedOffset, trunOffset, MIN_ABS_SPEED_A, MIN_ABS_SPEED_B);
+//  if (!isTurn)
+    my_motor.move(output, speedOffset, trunOffset, MIN_ABS_SPEED_A, MIN_ABS_SPEED_B);
 
-  // --- Debug Serial ---
-  Serial.print("Angle: "); Serial.print(angle);
-  Serial.print(" | Setpoint: "); Serial.print(angle_setpoint);
-  Serial.print(" | Motor PWM: "); Serial.print(motor_output);
-  Serial.print(" | GyroX: "); Serial.print(gyroX);
-  Serial.print(" | VelOut: "); Serial.println(velocity_output);
+//  // แสดงข้อมูลใน Serial Monitor
+  Serial.print(" | Angle: ");
+  Serial.println(input);
+//  Serial.print(" | Output: ");
+//  Serial.println(output);
+//  Serial.print(" | Setpoint: ");
+//  Serial.println(setpoint);
+
 
   delay(10);
 }
