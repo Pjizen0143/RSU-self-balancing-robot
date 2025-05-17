@@ -25,6 +25,8 @@ IRCommand IRController::getCommand() {
         case 0xFF4AB5: return IRCommand::Backward;
         case 0xFF10EF: return IRCommand::Left;
         case 0xFF5AA5: return IRCommand::Right;
+        case 0xFF11EA: return IRCommand::ForwardBoot;
+        case 0xFF4AA4: return IRCommand::BackwardBoot;
         default:       return IRCommand::None;
     }
 }

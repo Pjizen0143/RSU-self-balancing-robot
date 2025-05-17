@@ -8,7 +8,9 @@ enum class IRCommand {
     Forward,
     Backward,
     Left,
-    Right
+    Right,
+    ForwardBoot,
+    BackwardBoot
 };
 
 class IRController {

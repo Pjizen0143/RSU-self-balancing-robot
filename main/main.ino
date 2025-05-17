@@ -27,7 +27,6 @@ double speedOffset = 0, trunOffset = 0;
 
 double boot = 150;
 double bootLR = 110;
-bool isTurn = false;
 
 PID pid(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
 
@@ -77,14 +76,14 @@ void loop() {
 
       switch (cmd) {
           case IRCommand::Forward:
-           
+              // เดินหน้า
               if (setpoint < originalSetpoint + 4)
                 setpoint += 1.5;
               digitalWrite(LED, HIGH);
               break;
 
           case IRCommand::Backward:
-              
+              // ถอยหลัง
               if (setpoint > originalSetpoint - 4)
                 setpoint -= 1.5;
               digitalWrite(LED, HIGH);
@@ -92,7 +91,6 @@ void loop() {
 
           case IRCommand::Left:
               // เลี้ยวซ้าย
-//              isTurn = true;
               speedOffset = bootLR;
               trunOffset = -bootLR;
               my_motor.turnLeft(255);
@@ -101,7 +99,6 @@ void loop() {
 
           case IRCommand::Right:
               // เลี้ยวขวา
-//              isTurn = true;
               speedOffset = bootLR;
               trunOffset = bootLR;
               digitalWrite(LED, HIGH);
@@ -112,8 +109,8 @@ void loop() {
               MIN_ABS_SPEED_B = 120;
               if (setpoint < originalSetpoint + 2)
                 setpoint += 0.5;
-              digitalWrite(LED, HIGH);
               speedOffset = boot;
+              digitalWrite(LED, HIGH);
               break;
 
           case IRCommand::BackwardBoot:
@@ -121,8 +118,8 @@ void loop() {
               MIN_ABS_SPEED_B = 120;
               if (setpoint > originalSetpoint - 2)
                 setpoint -= 0.5;
-              digitalWrite(LED, HIGH);
               speedOffset = -boot;
+              digitalWrite(LED, HIGH);
           default:
               break;
       }
@@ -132,24 +129,21 @@ void loop() {
   if (now - ir.getLastCommandTime() > commandTimeout) {
      MIN_ABS_SPEED_A = 40;
      MIN_ABS_SPEED_B = 40;
-     digitalWrite(LED, LOW);
      trunOffset = 0;
      speedOffset = 0;
-     isTurn = false;
      setpoint = originalSetpoint;
+     digitalWrite(LED, LOW);
   }
 
-//  if (!isTurn)
     my_motor.move(output, speedOffset, trunOffset, MIN_ABS_SPEED_A, MIN_ABS_SPEED_B);
 
-//  // แสดงข้อมูลใน Serial Monitor
+// debug
   Serial.print(" | Angle: ");
-  Serial.println(input);
-//  Serial.print(" | Output: ");
-//  Serial.println(output);
-//  Serial.print(" | Setpoint: ");
-//  Serial.println(setpoint);
-
+  Serial.print(input);
+  Serial.print(" | Output: ");
+  Serial.print(output);
+  Serial.print(" | Setpoint: ");
+  Serial.println(setpoint);
 
   delay(10);
 }
